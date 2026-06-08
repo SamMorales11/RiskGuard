@@ -69,19 +69,19 @@ def create_tables_if_not_exists(engine):
 def extract_mock_data() -> pd.DataFrame:
     """
     [STAGE: EXTRACT]
-    Mensimulasikan pengambilan data mentah (kotor) dari sistem registrasi Fintech.
-    Menghasilkan 100 data pelamar pinjaman tiruan untuk pengujian.
+    Mensimulasikan pengambilan data mentah dari sistem pendaftaran Fintech.
+    Membuat hubungan korelasi statistik logis antara profil finansial dan target risiko (is_default).
     """
     logging.info("Sourcing data mentah dari aplikasi pendaftaran...")
     np.random.seed(42)
-    n_samples = 100
+    n_samples = 5000
     
-    # Generate data kotor (mengandung missing values & PII)
+    # 1. Generate data profil dasar pendaftar terlebih dahulu
     raw_df = pd.DataFrame({
         'nik': [f"647101{str(i).zfill(10)}" for i in range(1, n_samples + 1)],
         'name': np.random.choice(['Budi Santoso', 'Siti Aminah', 'Rian Hidayat', 'Dewi Lestari', 'Samuel Siregar'], n_samples),
         'email': np.random.choice(['user@gmail.com', 'kerja@itk.ac.id', None, 'nasabah@yahoo.com'], n_samples),
-        'age': np.random.choice([20, 25, 30, 45, None, 60], n_samples), # Ada data bolong
+        'age': np.random.choice([20, 25, 30, 45, None, 60], n_samples),
         'income_annual': np.random.uniform(30000000, 250000000, n_samples),
         'employment_type': np.random.choice(['Full-time', 'Part-time', 'Self-employed', None], n_samples),
         'housing_status': np.random.choice(['Rent', 'Own', 'Mortgage'], n_samples),
@@ -92,9 +92,23 @@ def extract_mock_data() -> pd.DataFrame:
         'loan_amount': np.random.uniform(5000000, 80000000, n_samples),
         'interest_rate': np.random.uniform(0.08, 0.24, n_samples),
         'loan_term_months': np.random.choice([6, 12, 24, 36], n_samples),
-        'loan_purpose': np.random.choice(['Education', 'Business', 'Personal', 'Medical'], n_samples),
-        'is_default': np.random.choice([0, 1], n_samples, p=[0.82, 0.18]) # 18% Rasio Gagal Bayar (Imbalanced)
+        'loan_purpose': np.random.choice(['Education', 'Business', 'Personal', 'Medical'], n_samples)
     })
+    
+    # 2. STRATEGI SINYAL ML: Hitung skor risiko finansial kumulatif untuk menentukan target 'is_default'
+    # Aturan Bisnis: Keterlambatan pembayaran hari yang tinggi & skor biro rendah menaikkan risiko gagal bayar.
+    risk_score = (
+        (raw_df['past_due_days_max'] / 95.0) * 0.5 + 
+        ((800 - raw_df['bureau_score']) / 400.0) * 0.3 + 
+        (raw_df['number_of_existing_loans'] / 4.0) * 0.2
+    )
+    
+    # Menentukan batas klausa default pinjaman berdasarkan ambang skor risiko (> 0.45 dianggap default)
+    raw_df['is_default'] = np.where(risk_score > 0.45, 1, 0)
+    
+    # Suntikkan 5% noise acak agar data natural, menantang, dan realistis bagi algoritma Machine Learning
+    noise = np.random.choice([0, 1], n_samples, p=[0.95, 0.05])
+    raw_df['is_default'] = np.bitwise_xor(raw_df['is_default'], noise)
     
     # Buat ID Aplikasi unik
     raw_df['application_id'] = [f"APP-{2026}{str(i).zfill(4)}" for i in range(1, n_samples + 1)]
@@ -136,29 +150,33 @@ def transform_data(raw_df: pd.DataFrame) -> tuple:
 def load_data_to_cloud(engine, df_cust, df_credit, df_fact):
     """
     [STAGE: LOAD]
-    Memasukkan data yang telah bertransformasi ke Cloud PostgreSQL dengan mematuhi Foreign Key constraints.
+    Memasukkan data dengan batas chunksize agar aman dari limit parameter Cloud DB.
+    Ditambahkan fitur TRUNCATE untuk mengosongkan data lama agar tidak duplikat.
     """
-    logging.info("Memulai pengunggahan data ke Serverless PostgreSQL Cloud...")
-    
+    logging.info("Memulai pembersihan data lama di Cloud DB (Truncate)...")
     try:
-        # 1. Load Dim_Customers terlebih dahulu (karena bertindak sebagai Parent Table)
+        # Bersihkan data lama dari tabel fakta dan dimensi secara berurutan (menghindari FK constraint)
+        with engine.begin() as connection:
+            connection.execute(text("TRUNCATE TABLE fact_loan_applications, dim_credit_history, dim_customers CASCADE;"))
+        logging.info("✔ Database bersih. Bersiap melakukan Ingestion baru...")
+        
+        # 1. Load Dim_Customers 
         logging.info("Mengunggah data ke tabel 'dim_customers'...")
-        df_cust.to_sql('dim_customers', con=engine, if_exists='append', index=False, method='multi')
+        df_cust.to_sql('dim_customers', con=engine, if_exists='append', index=False, method='multi', chunksize=500)
         
         # 2. Load Dim_Credit_History
         logging.info("Mengunggah data ke tabel 'dim_credit_history'...")
-        df_credit.to_sql('dim_credit_history', con=engine, if_exists='append', index=False, method='multi')
+        df_credit.to_sql('dim_credit_history', con=engine, if_exists='append', index=False, method='multi', chunksize=500)
         
-        # Ambil ID yang digenerate otomatis oleh Postgres untuk tabel Credit History agar bisa ditaruh di Tabel Fakta
+        # Ambil ID otomatis dari Postgres
         with engine.connect() as conn:
             credit_mapping = pd.read_sql("SELECT credit_history_id, customer_id FROM dim_credit_history", conn)
             
-        # Petakan kembali credit_history_id ke tabel fakta berdasarkan customer_id
         df_fact = df_fact.merge(credit_mapping, on='customer_id', how='left')
         
-        # 3. Load Fact_Loan_Applications (Tabel Fakta terakhir karena bergantung pada semua tabel Dimensi)
+        # 3. Load Fact_Loan_Applications
         logging.info("Mengunggah data ke tabel 'fact_loan_applications'...")
-        df_fact.to_sql('fact_loan_applications', con=engine, if_exists='append', index=False, method='multi')
+        df_fact.to_sql('fact_loan_applications', con=engine, if_exists='append', index=False, method='multi', chunksize=500)
         
         logging.info("🎉 PIPELINE ETL BERJALAN SUKSES! Data berhasil di-ingest ke Cloud Database.")
         
