@@ -68,15 +68,15 @@ def create_tables_if_not_exists(engine):
 
 def extract_mock_data() -> pd.DataFrame:
     """
-    [STAGE: EXTRACT]
-    Mensimulasikan pengambilan data mentah dari sistem pendaftaran Fintech.
-    Membuat hubungan korelasi statistik logis antara profil finansial dan target risiko (is_default).
+    [STAGE: EXTRACT - REVISED FOR COHORT]
+    Mensimulasikan data pendaftaran Fintech dengan distribusi tanggal mundur 6 bulan
+    untuk memfasilitasi kebutuhan Fitur Vintage Analitika.
     """
-    logging.info("Sourcing data mentah dari aplikasi pendaftaran...")
+    logging.info("Sourcing data mentah historis dengan skema data rentang waktu...")
     np.random.seed(42)
     n_samples = 5000
     
-    # 1. Generate data profil dasar pendaftar terlebih dahulu
+    # 1. Generate data dasar
     raw_df = pd.DataFrame({
         'nik': [f"647101{str(i).zfill(10)}" for i in range(1, n_samples + 1)],
         'name': np.random.choice(['Budi Santoso', 'Siti Aminah', 'Rian Hidayat', 'Dewi Lestari', 'Samuel Siregar'], n_samples),
@@ -95,24 +95,23 @@ def extract_mock_data() -> pd.DataFrame:
         'loan_purpose': np.random.choice(['Education', 'Business', 'Personal', 'Medical'], n_samples)
     })
     
-    # 2. STRATEGI SINYAL ML: Hitung skor risiko finansial kumulatif untuk menentukan target 'is_default'
-    # Aturan Bisnis: Keterlambatan pembayaran hari yang tinggi & skor biro rendah menaikkan risiko gagal bayar.
+    # 2. Logika Sinyal Risiko ML
     risk_score = (
         (raw_df['past_due_days_max'] / 95.0) * 0.5 + 
         ((800 - raw_df['bureau_score']) / 400.0) * 0.3 + 
         (raw_df['number_of_existing_loans'] / 4.0) * 0.2
     )
-    
-    # Menentukan batas klausa default pinjaman berdasarkan ambang skor risiko (> 0.45 dianggap default)
     raw_df['is_default'] = np.where(risk_score > 0.45, 1, 0)
-    
-    # Suntikkan 5% noise acak agar data natural, menantang, dan realistis bagi algoritma Machine Learning
     noise = np.random.choice([0, 1], n_samples, p=[0.95, 0.05])
     raw_df['is_default'] = np.bitwise_xor(raw_df['is_default'], noise)
     
-    # Buat ID Aplikasi unik
-    raw_df['application_id'] = [f"APP-{2026}{str(i).zfill(4)}" for i in range(1, n_samples + 1)]
-    raw_df['application_date'] = pd.Timestamp.now().date()
+    # 3. KUNCI FASE 6: Distribusikan tanggal pendaftaran mundur ke Januari - Mei 2026
+    start_date = pd.Timestamp('2026-01-01')
+    random_days_back = np.random.randint(0, 140, n_samples) # rentang waktu 5 bulan terakhir
+    raw_df['application_date'] = [(start_date + pd.Timedelta(days=int(d))).date() for d in random_days_back]
+    
+    # Buat ID Aplikasi unik berbasis bulan kohort
+    raw_df['application_id'] = [f"APP-{date.strftime('%Y%m')}-{str(i).zfill(4)}" for i, date in enumerate(raw_df['application_date'])]
     
     return raw_df
 
