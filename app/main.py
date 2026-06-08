@@ -153,7 +153,7 @@ with right_simulator_col:
         submit_btn = st.form_submit_button("Run Risk Assessment Engine")
         
         if submit_btn:
-            # Algoritma kalkulasi prediktif backend
+            # 1. Algoritma Kalkulasi Prediktif Backend (Fase 3)
             base_risk = (past_due_days / 95.0) * 0.5 + ((800 - bureau_score) / 400.0) * 0.3 + (existing_loans / 4.0) * 0.2
             probability_of_default = min(max(base_risk, 0.0), 1.0)
             
@@ -162,9 +162,42 @@ with right_simulator_col:
             st.write(f"**Applicant Token:** `{applicant_name}`")
             st.write(f"**Probability of Default (PD):** `{probability_of_default * 100:.2f}%`")
             
+            # 2. FITUR LANJUTAN: RISK-BASED PRICING ENGINE
+            st.markdown("#### Customized Credit Pricing Options")
             if probability_of_default > 0.45:
                 st.error("CREDIT DECISION: REJECTED (High Default Risk Exposure)")
-                st.warning("Rekomendasi Tambahan: Amankan portofolio modal, rekam jejak kolektibilitas nasabah buruk.")
+                st.warning("Rekomendasi: Profil risiko melampaui batas toleransi perusahaan. Pengajuan ditolak otomatis.")
             else:
-                st.success("CREDIT DECISION: APPROVED (Creditworthy Profile)")
-                st.info("Rekomendasi Tambahan: Berikan suku bunga standar, kapasitas bayar aman.")
+                # Skenario Risiko Rendah vs Risiko Menengah
+                if probability_of_default <= 0.20:
+                    risk_tier = "Low Risk Tier (Prime Client)"
+                    max_limit = min(income * 0.4, 80000000) # Limit hingga 80 Juta
+                    offered_interest = 0.105 # Bunga murah 10.5% p.a.
+                    st.success(f"CREDIT DECISION: APPROVED - {risk_tier}")
+                else:
+                    risk_tier = "Medium Risk Tier (Subprime Client)"
+                    max_limit = min(income * 0.2, 35000000) # Limit diperketat maks 35 Juta
+                    offered_interest = 0.185 # Bunga kompensasi risiko tinggi 18.5% p.a.
+                    st.info(f"CREDIT DECISION: APPROVED WITH CONDITIONS - {risk_tier}")
+                
+                # Tampilkan hasil penyesuaian harga kredit korporat
+                p_col1, p_col2 = st.columns(2)
+                p_col1.metric("Maximum Risk Exposure Limit", f"Rp {max_limit:,.0f}")
+                p_col2.metric("Offered Interest Rate", f"{offered_interest * 100:.1f}% p.a.")
+
+            # 3. FITUR LANJUTAN: MODEL EXPLAINABILITY (TRANSPARANSI KEPUTUSAN AI)
+            st.markdown("#### Local Risk Factor Contributions")
+            st.markdown("<p style='font-size:0.85rem; color:#8A9099;'>Grafik di bawah menunjukkan faktor apa yang paling memicu kenaikan probabilitas gagal bayar nasabah ini.</p>", unsafe_allow_html=True)
+            
+            # Hitung kontribusi riil dari masing-masing bobot fitur terhadap nilai PD akhir
+            explanation_data = pd.DataFrame({
+                'Risk Factor': ['Past Due History', 'Bureau Credit Profile', 'Active Credit Exposure'],
+                'Risk Contribution Score': [
+                    (past_due_days / 95.0) * 0.5,
+                    ((800 - bureau_score) / 400.0) * 0.3,
+                    (existing_loans / 4.0) * 0.2
+                ]
+            }).set_index('Risk Factor')
+            
+            # Tampilkan grafik kontribusi horizontal yang bersih tanpa emoji
+            st.bar_chart(explanation_data, horizontal=True, height=180)

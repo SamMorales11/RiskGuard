@@ -2,7 +2,7 @@ pandas==2.2.2
 numpy==1.26.4
 scikit-learn>=1.5.2
 imbalanced-learn>=0.12.4
-psycopg2-binary>=2.9.10
+psycopg[binary]
 sqlalchemy>=2.0.36
 python-dotenv==1.0.1
-streamlit==1.35.0
+streamlit>=1.38.0
