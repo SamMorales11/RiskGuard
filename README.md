@@ -72,8 +72,9 @@ Displays explicit feature risk factors (e.g., Past Due History) causing the defa
 
 <img width="885" height="592" alt="Screenshot 2026-06-09 092512" src="https://github.com/user-attachments/assets/35c8a52b-31c9-46c3-aaf3-4d27d32bb2b1" />
 
-## 📂 Repository Directory Tree
+## 📁 Repository Directory Tree
 
+```text
 RiskGuard/
 ├── app/
 │   └── main.py              # Streamlit analytical dashboard & RBP interface
@@ -87,6 +88,7 @@ RiskGuard/
 ├── .env.example             # Template for required infrastructure environment keys
 ├── requirements.txt         # Production-ready package dependency lockfile
 └── README.md                # Technical platform reference manual
+```
 
 ### ⚙️ Quick Installation & Setup
 
