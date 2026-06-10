@@ -72,5 +72,55 @@ Displays explicit feature risk factors (e.g., Past Due History) causing the defa
 
 <img width="885" height="592" alt="Screenshot 2026-06-09 092512" src="https://github.com/user-attachments/assets/35c8a52b-31c9-46c3-aaf3-4d27d32bb2b1" />
 
+## 📂 Repository Directory Tree
+
+RiskGuard/
+├── app/
+│   └── main.py              # Streamlit analytical dashboard & RBP interface
+├── config/
+│   └── database.py          # SQLAlchemy connection management via Psycopg v3
+├── src/
+│   ├── utils/
+│   │   └── security.py      # Cryptographic hashing & PII data masking script
+│   ├── modeling.py          # Machine learning model training & metrics evaluator
+│   └── pipeline_etl.py      # Idempotent database setup and transaction generator
+├── .env.example             # Template for required infrastructure environment keys
+├── requirements.txt         # Production-ready package dependency lockfile
+└── README.md                # Technical platform reference manual
+
+### ⚙️ Quick Installation & Setup
+
+1. Clone the Repository
+```bash
+git clone [https://github.com/SamMorales11/RiskGuard.git](https://github.com/SamMorales11/RiskGuard.git)
+cd RiskGuard
+```
+2. Initialize and Activate Virtual Environment
+```bash
+python -m venv env
+# For Windows
+.\env\Scripts\activate
+# For macOS/Linux
+source env/bin/activate
+```
+3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+4. Configure Environment Keys
+Create a .env file in the root directory:
+```bash
+DATABASE_URL=postgresql+psycopg://username:password@your-neon-host.tech/dbname?sslmode=require
+APP_SALT=YourSuperSecretCustomSaltHereValue
+```
+5. Execute the Analytical Infrastructure Data Pipeline
+```bash
+python src/pipeline_etl.py
+```
+6. Boot up the Underwriting Interface Command Center
+```bash
+python -m streamlit run app/main.py
+```
+
 
 
